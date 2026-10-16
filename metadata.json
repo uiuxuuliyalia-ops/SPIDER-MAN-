@@ -1,0 +1,6 @@
+{
+  "name": "Spider-Man: Web-Slinger 3D",
+  "description": "3D Web-slinging action game set in Manhattan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
