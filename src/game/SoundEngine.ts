@@ -344,6 +344,103 @@ class SoundEngine {
     osc.start(t);
     osc.stop(t + 0.52);
   }
+
+  /**
+   * Iconic Insomniac Point Launch Slingshot Sound:
+   * Explosive kinetic spring snap with resonant upward whoosh.
+   */
+  public playPointLaunch() {
+    if (this.isMuted) return;
+    this.initCtx();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+    // Sub-bass thud
+    const osc1 = this.ctx.createOscillator();
+    const gain1 = this.ctx.createGain();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(140, t);
+    osc1.frequency.exponentialRampToValueAtTime(35, t + 0.22);
+    gain1.gain.setValueAtTime(0.7, t);
+    gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+    osc1.connect(gain1);
+    gain1.connect(this.masterGain);
+    osc1.start(t);
+    osc1.stop(t + 0.25);
+
+    // High velocity slingshot whip
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(320, t);
+    osc2.frequency.exponentialRampToValueAtTime(1800, t + 0.12);
+    gain2.gain.setValueAtTime(0.4, t);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc2.connect(gain2);
+    gain2.connect(this.masterGain);
+    osc2.start(t);
+    osc2.stop(t + 0.2);
+  }
+
+  /**
+   * Acrobatic Air Trick Whoosh:
+   * Swift, energetic aerial swoosh when performing mid-air parkour spins.
+   */
+  public playAirTrick() {
+    if (this.isMuted) return;
+    this.initCtx();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(240, t);
+    osc.frequency.exponentialRampToValueAtTime(650, t + 0.09);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.18);
+
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+
+  /**
+   * Manhattan City Atmosphere:
+   * Subtle distant traffic honk in the urban canyon.
+   */
+  public playCabHorn() {
+    if (this.isMuted) return;
+    this.initCtx();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(392, t); // G4
+    osc2.frequency.setValueAtTime(440, t); // A4
+
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc1.start(t);
+    osc2.start(t);
+    osc1.stop(t + 0.28);
+    osc2.stop(t + 0.28);
+  }
 }
 
 export const soundEngine = new SoundEngine();

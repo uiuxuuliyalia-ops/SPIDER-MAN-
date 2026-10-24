@@ -59,11 +59,14 @@ export class SpidermanCharacter {
   private wallStridePhase = 0;
   private prevFootstepSide: 'left' | 'right' | null = null;
 
-  // Attack Animation timers
+  // Attack & Dodge Animation timers
   private comboIndex = 0;
   private meleeTimer = 0;
   private webPelletTimer = 0;
   private webCocoonTimer = 0;
+  private dodgeTimer = 0;
+  private dodgeDuration = 0.35;
+  private dodgeDirection: 'left' | 'right' | 'back' | 'forward' = 'left';
   private suitTextures: Record<SuitType, THREE.CanvasTexture>;
 
   constructor() {
@@ -84,35 +87,67 @@ export class SpidermanCharacter {
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
-    // Red suit base
+    // Rich Red Suit Base
     ctx.fillStyle = '#dc2626';
     ctx.fillRect(0, 0, 512, 512);
 
-    // Blue side panels
-    ctx.fillStyle = '#1e3a8a';
-    ctx.fillRect(0, 0, 140, 512);
-    ctx.fillRect(372, 0, 140, 512);
+    // Deep Athletic Navy Blue Side Panels
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillRect(0, 0, 142, 512);
+    ctx.fillRect(370, 0, 142, 512);
 
-    // Webbing pattern lines
-    ctx.strokeStyle = '#090d16';
-    ctx.lineWidth = 3;
-
-    for (let y = 20; y < 512; y += 40) {
-      ctx.beginPath();
-      ctx.moveTo(140, y);
-      ctx.quadraticCurveTo(256, y + 15, 372, y);
-      ctx.stroke();
+    // High-tech hexagonal woven micro-texture (Marvel's Spider-Man fabric feel)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.09)';
+    for (let y = 0; y < 512; y += 6) {
+      for (let x = 0; x < 512; x += 6) {
+        if ((x + y) % 12 === 0) {
+          ctx.fillRect(x, y, 2.5, 2.5);
+        }
+      }
     }
 
-    for (let x = 160; x <= 352; x += 32) {
+    // Embossed Webbing Pattern (Drop Shadow + Crisp Highlight Line)
+    const drawWebArc = (y: number) => {
+      // Dark under-shadow
+      ctx.strokeStyle = '#050811';
+      ctx.lineWidth = 3.6;
+      ctx.beginPath();
+      ctx.moveTo(142, y + 1);
+      ctx.quadraticCurveTo(256, y + 17, 370, y + 1);
+      ctx.stroke();
+
+      // Sharp top web-line
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(142, y);
+      ctx.quadraticCurveTo(256, y + 16, 370, y);
+      ctx.stroke();
+    };
+
+    for (let y = 16; y < 512; y += 36) {
+      drawWebArc(y);
+    }
+
+    // Radial longitudinal web lines
+    for (let x = 158; x <= 354; x += 28) {
+      ctx.strokeStyle = '#050811';
+      ctx.lineWidth = 3.4;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x + (x - 256) * 0.25, 512);
+      ctx.lineTo(x + (x - 256) * 0.28, 512);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.5, 0);
+      ctx.lineTo(x - 0.5 + (x - 256) * 0.28, 512);
       ctx.stroke();
     }
 
-    // Front Chest Spider Logo (Centered at x=256, which maps to front when rotated)
-    this.drawSpiderLogo(ctx, 256, 256, '#090d16', 1.05);
+    // Front Chest Spider Logo (Centered at x=256, mapped to chest)
+    this.drawSpiderLogo(ctx, 256, 256, '#0f172a', 1.15);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -127,31 +162,34 @@ export class SpidermanCharacter {
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
+    // Liquid Alien Bio-suit Gradient with deep purple/navy sheen
     const grad = ctx.createLinearGradient(0, 0, 512, 512);
     grad.addColorStop(0, '#020617');
-    grad.addColorStop(0.5, '#0f172a');
+    grad.addColorStop(0.35, '#0f172a');
+    grad.addColorStop(0.7, '#1e1b4b');
     grad.addColorStop(1, '#020617');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
 
-    ctx.strokeStyle = '#1e293b';
+    // Organic biomechanical tendon fibers
+    ctx.strokeStyle = '#334155';
     ctx.lineWidth = 2;
-
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 14; i++) {
       ctx.beginPath();
       ctx.moveTo(Math.random() * 512, 0);
       ctx.bezierCurveTo(
         Math.random() * 512,
-        200,
+        180,
         Math.random() * 512,
-        350,
+        340,
         Math.random() * 512,
         512
       );
       ctx.stroke();
     }
 
-    this.drawSpiderLogo(ctx, 256, 256, '#ffffff', 1.35);
+    // Brilliant White Symbiote Spider Logo
+    this.drawSpiderLogo(ctx, 256, 256, '#ffffff', 1.45);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -166,41 +204,56 @@ export class SpidermanCharacter {
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
+    // Stealth Matte Black
     ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, 512, 512);
 
+    // Hex Carbon Grid
     ctx.fillStyle = '#1e293b';
     for (let y = 0; y < 512; y += 8) {
       for (let x = 0; x < 512; x += 8) {
         if ((x + y) % 16 === 0) {
-          ctx.fillRect(x, y, 4, 4);
+          ctx.fillRect(x, y, 3.5, 3.5);
         }
       }
     }
 
-    ctx.strokeStyle = '#ef4444';
+    // Bio-electric Crimson Webbing
+    ctx.strokeStyle = '#dc2626';
     ctx.lineWidth = 3.5;
-
-    for (let y = 30; y < 512; y += 45) {
+    for (let y = 24; y < 512; y += 42) {
       ctx.beginPath();
-      ctx.moveTo(100, y);
-      ctx.quadraticCurveTo(256, y + 20, 412, y);
+      ctx.moveTo(90, y);
+      ctx.quadraticCurveTo(256, y + 22, 422, y);
       ctx.stroke();
     }
 
-    for (let x = 120; x <= 392; x += 38) {
+    for (let x = 110; x <= 402; x += 36) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x + (x - 256) * 0.3, 512);
+      ctx.lineTo(x + (x - 256) * 0.32, 512);
       ctx.stroke();
     }
 
-    this.drawSpiderLogo(ctx, 256, 256, '#ef4444', 1.15);
+    // Graffiti-styled Miles Morales Red Spider Insignia
+    this.drawSpiderLogo(ctx, 256, 256, '#ef4444', 1.25);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  private createBackLogoTexture(color = '#b91c1c'): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 256, 256);
+    this.drawSpiderLogo(ctx, 128, 128, color, 1.4);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
   }
 
@@ -291,7 +344,9 @@ export class SpidermanCharacter {
       mat.needsUpdate = true;
     });
 
-    (this.rig.backDecalMesh.material as THREE.MeshBasicMaterial).color.setHex(backLogoColor);
+    (this.rig.backDecalMesh.material as THREE.MeshBasicMaterial).map =
+      this.createBackLogoTexture(suit === 'symbiote' ? '#ffffff' : suit === 'miles' ? '#ef4444' : '#b91c1c');
+    (this.rig.backDecalMesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
   }
 
   /**
@@ -316,8 +371,16 @@ export class SpidermanCharacter {
       metalness: 0.85,
       roughness: 0.2,
     });
-    const eyeFrameMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
-    const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eyeFrameMat = new THREE.MeshStandardMaterial({
+      color: 0x090d16,
+      roughness: 0.35,
+      metalness: 0.85,
+    });
+    const eyeWhiteMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc,
+      roughness: 0.1,
+      metalness: 0.45,
+    });
 
     const redMeshes: THREE.Mesh[] = [];
     const blueMeshes: THREE.Mesh[] = [];
@@ -386,39 +449,63 @@ export class SpidermanCharacter {
 
     // Back spider logo decal (Sits strictly at the rear -Z, facing backward)
     const backDecalMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.18, 0.18),
-      new THREE.MeshBasicMaterial({ color: 0xb91c1c, transparent: true, opacity: 0.95 })
+      new THREE.PlaneGeometry(0.24, 0.24),
+      new THREE.MeshBasicMaterial({
+        map: this.createBackLogoTexture('#b91c1c'),
+        transparent: true,
+        opacity: 0.96,
+      })
     );
     backDecalMesh.rotation.y = Math.PI;
     backDecalMesh.position.set(0, 0.15, -0.14);
     spineThorax.add(backDecalMesh);
 
-    // NECK & HEAD
+    // NECK & HEAD (With athletic trapezius slope and sculpted superhero jawline)
     const neck = new THREE.Group();
     neck.position.y = 0.3;
     spineThorax.add(neck);
 
-    const neckMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.09, 0.12, 8),
+    // Anatomical Trapezius muscle slope connecting neck down into broad shoulders
+    const trapezius = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.17, 0.14, 10),
       redMat
     );
-    neckMesh.position.y = 0.06;
+    trapezius.position.y = 0.04;
+    neck.add(trapezius);
+    redMeshes.push(trapezius);
+
+    const neckMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.082, 0.088, 0.12, 8),
+      redMat
+    );
+    neckMesh.position.y = 0.08;
     neck.add(neckMesh);
     redMeshes.push(neckMesh);
 
     const head = new THREE.Group();
-    head.position.y = 0.12;
+    head.position.y = 0.14;
     neck.add(head);
 
+    // Cranium
     const headMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.17, 16, 14),
+      new THREE.SphereGeometry(0.165, 16, 14),
       redMat
     );
-    headMesh.scale.set(0.9, 1.15, 1.05);
+    headMesh.scale.set(0.9, 1.12, 1.05);
     headMesh.position.y = 0.08;
     headMesh.castShadow = true;
     head.add(headMesh);
     redMeshes.push(headMesh);
+
+    // Sculpted superhero jawline and chin contour
+    const jawMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.11, 0.14, 8),
+      redMat
+    );
+    jawMesh.rotation.x = Math.PI;
+    jawMesh.position.set(0, 0.01, 0.04);
+    head.add(jawMesh);
+    redMeshes.push(jawMesh);
 
     // Spider-Sense Alert Crown
     const spiderSenseAlertMesh = new THREE.Group();
@@ -435,23 +522,23 @@ export class SpidermanCharacter {
     }
     head.add(spiderSenseAlertMesh);
 
-    // Comic Spider Eyes (Facing forward on +Z)
+    // Comic Spider Eyes (Facing forward on +Z with 3D raised frames)
     const makeEye = (isRight: boolean) => {
       const eyeGroup = new THREE.Group();
       const sign = isRight ? 1 : -1;
 
-      const frameGeom = new THREE.RingGeometry(0.02, 0.08, 4, 1, Math.PI / 4, Math.PI * 1.5);
+      const frameGeom = new THREE.RingGeometry(0.02, 0.082, 8, 1, Math.PI / 4, Math.PI * 1.5);
       const frame = new THREE.Mesh(frameGeom, eyeFrameMat);
-      frame.scale.set(1.4, 0.9, 1);
+      frame.scale.set(1.42, 0.92, 1);
       frame.rotation.z = sign * 0.35;
       eyeGroup.add(frame);
       eyeFrameMeshes.push(frame);
 
-      const lensGeom = new THREE.CircleGeometry(0.062, 5);
+      const lensGeom = new THREE.CircleGeometry(0.065, 8);
       const lens = new THREE.Mesh(lensGeom, eyeWhiteMat);
-      lens.scale.set(1.2, 0.75, 1);
+      lens.scale.set(1.22, 0.76, 1);
       lens.rotation.z = sign * 0.35;
-      lens.position.z = 0.005;
+      lens.position.z = 0.006;
       eyeGroup.add(lens);
       eyeLensMeshes.push(lens);
 
@@ -463,7 +550,7 @@ export class SpidermanCharacter {
     head.add(makeEye(false));
     head.add(makeEye(true));
 
-    // --- ARMS RIGGING (With Deltoids, Gauntlets & 🤟 Web-Shooter Hands) ---
+    // --- ARMS RIGGING (With Deltoids, Olecranon Elbow Caps, Gauntlets & 🤟 Web-Shooter Hands) ---
     const buildArm = (isRight: boolean) => {
       const sign = isRight ? -1 : 1;
 
@@ -472,17 +559,17 @@ export class SpidermanCharacter {
       clavicle.position.set(sign * 0.14, 0.24, 0);
       spineThorax.add(clavicle);
 
-      // Deltoid Shoulder Pad (Broad athletic superhero taper)
+      // Deltoid Shoulder Pad (Sculpted athletic superhero musculature)
       const shoulderMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.09, 8, 8),
+        new THREE.SphereGeometry(0.092, 10, 10),
         redMat
       );
       shoulderMesh.position.set(sign * 0.14, 0, 0);
-      shoulderMesh.scale.set(1.1, 1.0, 1.15);
+      shoulderMesh.scale.set(1.15, 0.95, 1.18);
       clavicle.add(shoulderMesh);
       redMeshes.push(shoulderMesh);
 
-      // Upper Arm (Humerus)
+      // Upper Arm (Humerus with bicep and tricep volume)
       const upperArm = new THREE.Group();
       upperArm.position.set(sign * 0.14, 0, 0);
       clavicle.add(upperArm);
@@ -496,28 +583,38 @@ export class SpidermanCharacter {
       upperArm.add(bicepMesh);
       redMeshes.push(bicepMesh);
 
-      // Elbow Joint (Placed at rear -Z)
+      // Anatomical Olecranon Elbow Joint Cap (sharp athletic joint articulation at rear)
       const elbowCap = new THREE.Mesh(
-        new THREE.SphereGeometry(0.055, 6, 6),
+        new THREE.SphereGeometry(0.055, 8, 8),
         redMat
       );
-      elbowCap.position.set(0, -0.26, -0.02);
+      elbowCap.scale.set(0.9, 0.9, 1.2);
+      elbowCap.position.set(0, -0.26, -0.025);
       upperArm.add(elbowCap);
       redMeshes.push(elbowCap);
 
-      // Forearm (Hinges at elbow: y = -0.26)
+      // Forearm (Hinges at elbow: y = -0.26 with extensor muscle taper)
       const forearm = new THREE.Group();
       forearm.position.set(0, -0.26, 0);
       upperArm.add(forearm);
 
       const forearmMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.055, 0.048, 0.26, 8),
+        new THREE.CylinderGeometry(0.056, 0.046, 0.26, 8),
         redMat
       );
       forearmMesh.position.y = -0.13;
       forearmMesh.castShadow = true;
       forearm.add(forearmMesh);
       redMeshes.push(forearmMesh);
+
+      // Forearm extensor bulge
+      const forearmBulge = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05, 6, 6),
+        redMat
+      );
+      forearmBulge.position.set(sign * 0.02, -0.08, -0.01);
+      forearm.add(forearmBulge);
+      redMeshes.push(forearmBulge);
 
       // Wrist Web Shooter Metallic Gauntlet
       const gauntletMesh = new THREE.Mesh(
@@ -540,6 +637,16 @@ export class SpidermanCharacter {
       palmMesh.position.y = -0.035;
       hand.add(palmMesh);
       redMeshes.push(palmMesh);
+
+      // Thumb
+      const thumb = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.01, 0.05, 6),
+        redMat
+      );
+      thumb.position.set(sign * 0.035, -0.04, 0.015);
+      thumb.rotation.z = sign * 0.55;
+      hand.add(thumb);
+      redMeshes.push(thumb);
 
       // Iconic 🤟 Fingers: Extended Index & Pinky, Curled Middle & Ring
       const fingerMat = redMat;
@@ -579,7 +686,7 @@ export class SpidermanCharacter {
     const leftArmData = buildArm(false);
     const rightArmData = buildArm(true);
 
-    // --- LEGS RIGGING (True backward-bending knee joint) ---
+    // --- LEGS RIGGING (With Sculpted Patella Kneecap, Calf Muscles & Contoured Running Boots) ---
     const buildLeg = (isRight: boolean) => {
       const sign = isRight ? -1 : 1;
 
@@ -587,8 +694,9 @@ export class SpidermanCharacter {
       thigh.position.set(sign * 0.12, -0.1, 0);
       hips.add(thigh);
 
+      // Upper Thigh (Muscular quadriceps taper)
       const thighMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.088, 0.07, 0.38, 8),
+        new THREE.CylinderGeometry(0.088, 0.068, 0.38, 8),
         blueMat
       );
       thighMesh.position.y = -0.19;
@@ -596,12 +704,13 @@ export class SpidermanCharacter {
       thigh.add(thighMesh);
       blueMeshes.push(thighMesh);
 
-      // Patella Knee Cap (Faces FORWARD on +Z, so knee bends BACKWARDS!)
+      // Sculpted Patella Knee Cap (Faces FORWARD on +Z with quad tendon crest)
       const kneeCap = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 6, 6),
+        new THREE.SphereGeometry(0.062, 8, 8),
         redMat
       );
-      kneeCap.position.set(0, -0.38, 0.03);
+      kneeCap.scale.set(0.95, 1.2, 0.95);
+      kneeCap.position.set(0, -0.38, 0.035);
       thigh.add(kneeCap);
       redMeshes.push(kneeCap);
 
@@ -611,7 +720,7 @@ export class SpidermanCharacter {
       thigh.add(shin);
 
       const shinMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.07, 0.055, 0.38, 8),
+        new THREE.CylinderGeometry(0.068, 0.052, 0.38, 8),
         redMat
       );
       shinMesh.position.y = -0.19;
@@ -619,27 +728,57 @@ export class SpidermanCharacter {
       shin.add(shinMesh);
       redMeshes.push(shinMesh);
 
-      // Muscular Calf bulge at rear of shin
+      // Muscular Gastrocnemius Calf bulge at rear of shin
       const calfBulge = new THREE.Mesh(
-        new THREE.SphereGeometry(0.062, 6, 6),
+        new THREE.SphereGeometry(0.066, 8, 8),
         redMat
       );
-      calfBulge.position.set(0, -0.14, -0.03);
+      calfBulge.scale.set(1.0, 1.35, 1.1);
+      calfBulge.position.set(0, -0.15, -0.035);
       shin.add(calfBulge);
       redMeshes.push(calfBulge);
 
-      // Foot & Ankle (Points forward towards +Z)
+      // Contoured Athletic Superhero Running Boot (arched instep, heel cup & beveled toe box)
       const foot = new THREE.Group();
-      foot.position.set(0, -0.38, 0.04);
+      foot.position.set(0, -0.38, 0.02);
       shin.add(foot);
 
-      const footMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(0.085, 0.065, 0.2),
+      // Boot Arch & Instep
+      const footInstep = new THREE.Mesh(
+        new THREE.BoxGeometry(0.085, 0.062, 0.14),
         redMat
       );
-      footMesh.position.set(0, -0.03, 0.05);
-      foot.add(footMesh);
-      redMeshes.push(footMesh);
+      footInstep.position.set(0, -0.031, 0.02);
+      foot.add(footInstep);
+      redMeshes.push(footInstep);
+
+      // Rounded Heel Cup
+      const heelCup = new THREE.Mesh(
+        new THREE.SphereGeometry(0.044, 8, 8),
+        redMat
+      );
+      heelCup.position.set(0, -0.025, -0.06);
+      foot.add(heelCup);
+      redMeshes.push(heelCup);
+
+      // Beveled Aerodynamic Toe Box
+      const toeBox = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.042, 0.042, 0.082, 10, 1, false, 0, Math.PI),
+        redMat
+      );
+      toeBox.rotation.z = Math.PI / 2;
+      toeBox.position.set(0, -0.035, 0.09);
+      foot.add(toeBox);
+      redMeshes.push(toeBox);
+
+      // Dark athletic rubber boot sole tread
+      const soleTread = new THREE.Mesh(
+        new THREE.BoxGeometry(0.088, 0.015, 0.22),
+        blueMat
+      );
+      soleTread.position.set(0, -0.062, 0.03);
+      foot.add(soleTread);
+      blueMeshes.push(soleTread);
 
       return { thigh, shin, foot };
     };
@@ -681,8 +820,13 @@ export class SpidermanCharacter {
 
   // --- ATTACK TRIGGER METHODS ---
   public triggerMeleeCombo(comboStep: number) {
-    this.comboIndex = comboStep % 4;
-    this.meleeTimer = 0.32;
+    this.comboIndex = comboStep === 99 ? 99 : comboStep % 6;
+    this.meleeTimer = 0.38;
+  }
+
+  public triggerAerialSlam() {
+    this.comboIndex = 99; // Special aerial slam
+    this.meleeTimer = 0.42;
   }
 
   public triggerWebPellet() {
@@ -693,6 +837,12 @@ export class SpidermanCharacter {
     this.webCocoonTimer = 0.45;
   }
 
+  public triggerDodge(direction: 'left' | 'right' | 'back' | 'forward' = 'left') {
+    this.dodgeDuration = 0.35;
+    this.dodgeTimer = 0.35;
+    this.dodgeDirection = direction;
+  }
+
   public setSpiderSense(active: boolean) {
     this.rig.spiderSenseAlertMesh.visible = active;
   }
@@ -700,23 +850,30 @@ export class SpidermanCharacter {
   /**
    * Main animation update:
    * Supports dynamic alternating swing arms (left/right anchor),
-   * superhero 3-point landing crouch, parkour banking, and acrobatic martial arts.
+   * superhero 3-point landing crouch, deep predatory spider squat, parkour banking,
+   * Insomniac combat stance, acrobatic dodges, and 6-hit martial arts combo chain.
    */
   public update(
     dt: number,
-    state: 'GROUND' | 'AIR' | 'SWINGING' | 'WALL_RUN' | 'WALL_STICK' | 'ZIP_TO_WALL',
+    state: 'GROUND' | 'AIR' | 'SWINGING' | 'WALL_RUN' | 'WALL_STICK' | 'ZIP_TO_WALL' | 'WEB_STRIKE',
     speed: number,
     isSprinting: boolean,
     isSwinging: boolean,
     isWallRunning: boolean,
     activeAnchorSide: 'left' | 'right' = 'right',
     bankAngle = 0,
-    superheroLandingTimer = 0
+    superheroLandingTimer = 0,
+    isDiving = false,
+    isAirTricking = false,
+    isCrouching = false,
+    isInCombat = false,
+    isAcrobaticLeap = false
   ) {
     this.animTime += dt;
     if (this.meleeTimer > 0) this.meleeTimer -= dt;
     if (this.webPelletTimer > 0) this.webPelletTimer -= dt;
     if (this.webCocoonTimer > 0) this.webCocoonTimer -= dt;
+    if (this.dodgeTimer > 0) this.dodgeTimer -= dt;
 
     const r = this.rig;
     const damp = (curr: number, target: number, speedVal = 14) =>
@@ -753,6 +910,63 @@ export class SpidermanCharacter {
       r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 0.9, 30);
       r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.5, 30);
       r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.4, 30);
+      return;
+    }
+
+    // --- INSOMNIAC ACROBATIC COMBAT DODGE OVERRIDE ---
+    if (this.dodgeTimer > 0) {
+      const p = 1.0 - this.dodgeTimer / this.dodgeDuration;
+      const arc = Math.sin(p * Math.PI);
+
+      if (this.dodgeDirection === 'left') {
+        // Acrobatic left cartwheel / slip
+        r.hips.position.y = damp(r.hips.position.y, 0.78 + arc * 0.32, 35);
+        r.hips.rotation.z = damp(r.hips.rotation.z, (1 - p) * Math.PI * 1.5, 35);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.45, 35);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -1.8, 35);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.8, 35);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 1.2, 35);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.6, 35);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -0.8, 35);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.2, 35);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, 0.6, 35);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.8, 35);
+      } else if (this.dodgeDirection === 'right') {
+        // Acrobatic right cartwheel / slip
+        r.hips.position.y = damp(r.hips.position.y, 0.78 + arc * 0.32, 35);
+        r.hips.rotation.z = damp(r.hips.rotation.z, -(1 - p) * Math.PI * 1.5, 35);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.45, 35);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -1.8, 35);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.8, 35);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 1.2, 35);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.6, 35);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -0.8, 35);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.2, 35);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.6, 35);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.8, 35);
+      } else if (this.dodgeDirection === 'back') {
+        // Acrobatic back-handspring / back-slip
+        r.hips.position.y = damp(r.hips.position.y, 0.84 + arc * 0.35, 35);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, -0.65, 35);
+        r.head.rotation.x = damp(r.head.rotation.x, 0.45, 35);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 1.4, 35);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 1.4, 35);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -0.9, 35);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.1, 35);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -0.9, 35);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.1, 35);
+      } else {
+        // Low acrobatic duck roll forward
+        r.hips.position.y = damp(r.hips.position.y, 0.54 + arc * 0.15, 35);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.85, 35);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.65, 35);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -1.2, 35);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -1.2, 35);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.3, 35);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.5, 35);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.3, 35);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.2, 35);
+      }
       return;
     }
 
@@ -896,29 +1110,172 @@ export class SpidermanCharacter {
       r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.5, 30);
       r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.7, 30);
       r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, -0.4, 30);
+    } else if (state === 'WEB_STRIKE') {
+      // DYNAMIC FLYING MISSILE DROPKICK (Web-Strike into bandit)
+      r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, -0.4, 40);
+      r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, -0.2, 40);
+      r.head.rotation.x = damp(r.head.rotation.x, 0.45, 40);
+
+      // Both arms thrust forward shooting webs directly into target
+      r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -1.6, 40);
+      r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.2, 40);
+      r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.05, 40);
+      r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -1.6, 40);
+      r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.2, 40);
+      r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.05, 40);
+
+      // Both boots thrust forward in high-velocity flying missile dropkick!
+      r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.75, 40);
+      r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.1, 40);
+      r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, 0.35, 40);
+
+      r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -1.65, 40);
+      r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.1, 40);
+      r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, 0.35, 40);
     } else if (state === 'AIR') {
-      // AIR DIVE / GLIDE: Streamlined aerodynamic tuck
       this.prevFootstepSide = null;
-      r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.45);
-      r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.2);
-      r.head.rotation.x = damp(r.head.rotation.x, -0.3);
 
-      r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 0.8);
-      r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.4);
-      r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.5);
-      r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 0.8);
-      r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.4);
-      r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.5);
+      if (isDiving) {
+        // HIGH-SPEED SWAN DIVE: Head down towards city, arms back as delta-wings, legs trailing
+        const flutter = Math.sin(this.animTime * 22) * 0.08;
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.72, 22);
+        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.25, 22);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.65, 22);
 
-      r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, 0.3);
-      r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.8);
-      r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, -0.3);
-      r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -0.2);
-      r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.6);
-      r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, -0.2);
+        // Delta wing swept-back arms
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 1.45, 22);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.35, 22);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.15, 22);
+
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 1.45, 22);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.35, 22);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.15, 22);
+
+        // Aerodynamic streamlined trailing legs
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, 0.45 + flutter, 22);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.45, 22);
+        r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, -0.4, 22);
+
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.45 - flutter, 22);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.45, 22);
+        r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, -0.4, 22);
+      } else if (isAcrobaticLeap) {
+        // ATHLETIC ACROBATIC SUPERHERO LEAP WITH TUCK AND FORWARD ARC (Space jump)
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.45, 28);
+        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.22, 28);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.42, 28);
+
+        // Arms braced forward and slightly out with wrists cocked for stabilizer balance
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.75, 28);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.35, 28);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.55, 28);
+
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -0.75, 28);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.35, 28);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.55, 28);
+
+        // Athletic tucked legs during ascent arc
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.15, 28);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.45, 28);
+        r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, -0.2, 28);
+
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -0.85, 28);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.25, 28);
+        r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, -0.2, 28);
+      } else if (isAirTricking) {
+        // ACROBATIC AIR PARKOUR TRICK (Front-Flip & Pike Spin)
+        const spinOsc = Math.sin(this.animTime * 14);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.65 + spinOsc * 0.35, 25);
+        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.3, 25);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.45, 25);
+
+        // Dynamic acrobatic limbs
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -1.2, 25);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.4, 25);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 1.1, 25);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.4, 25);
+
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.35, 25);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.45, 25);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.7, 25);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.05, 25);
+      } else {
+        // STREAMLINED AIR GLIDE / SKYLINE CRUISE
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.42);
+        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.18);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.32);
+
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 0.85);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.35);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.45);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 0.85);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.35);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.45);
+
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, 0.28);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.75);
+        r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, -0.25);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -0.18);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.58);
+        r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, -0.2);
+      }
     } else {
-      // GROUND RUN OR IDLE
-      if (speed > 0.4) {
+      // GROUND RUN, STEALTH CROUCH, OR IDLE
+      if (isCrouching) {
+        // --- ICONIC SPIDER-MAN DEEP PREDATORY CROUCH & STEALTH CRAWL ---
+        this.prevFootstepSide = null;
+        if (speed > 0.4) {
+          // Low athletic stealth crawl
+          const crawlFreq = 10.0;
+          this.stridePhase = (this.stridePhase + dt * crawlFreq) % (Math.PI * 2);
+          const pR = this.stridePhase;
+          const pL = (this.stridePhase + Math.PI) % (Math.PI * 2);
+
+          r.hips.position.y = damp(r.hips.position.y, 0.54, 25);
+          r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.62, 25);
+          r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.22, 25);
+          r.head.rotation.x = damp(r.head.rotation.x, -0.55, 25);
+
+          const armReach = Math.sin(this.stridePhase) * 0.65;
+          r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.9 - armReach, 25);
+          r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.4, 25);
+          r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -0.9 + armReach, 25);
+          r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.4, 25);
+
+          r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.25 + Math.cos(pR) * 0.45, 25);
+          r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.45, 25);
+          r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -1.25 + Math.cos(pL) * 0.45, 25);
+          r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.45, 25);
+        } else {
+          // Deep athletic 3-point spider perch crouch (fingertips planted, watchful gaze)
+          r.hips.position.y = damp(r.hips.position.y, 0.42, 25);
+          r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.72, 25);
+          r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.28, 25);
+          r.head.rotation.x = damp(r.head.rotation.x, -0.65, 25);
+
+          // Right hand down touching ground with spread fingers
+          r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.85, 25);
+          r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.25, 25);
+          r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.22, 25);
+          r.rightHand.rotation.x = damp(r.rightHand.rotation.x, -0.45, 25);
+
+          // Left arm raised back for balance
+          r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 0.75, 25);
+          r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.35, 25);
+          r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.65, 25);
+
+          // Deeply tucked spider-squat legs
+          r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.45, 25);
+          r.rightThigh.rotation.z = damp(r.rightThigh.rotation.z, -0.38, 25);
+          r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.55, 25);
+          r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, 0.35, 25);
+
+          r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -1.45, 25);
+          r.leftThigh.rotation.z = damp(r.leftThigh.rotation.z, 0.38, 25);
+          r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.55, 25);
+          r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, 0.35, 25);
+        }
+      } else if (speed > 0.4) {
         // NATURAL SPEED-SYNCHRONIZED STRIDE LOCOMOTION
         const strideFreq = Math.max(5.5, Math.min(25.0, speed * 0.92 + 3.8));
         this.stridePhase = (this.stridePhase + dt * strideFreq) % (Math.PI * 2);
@@ -962,15 +1319,11 @@ export class SpidermanCharacter {
           const thighX = -cosP * swingAmp;
           const thighZ = Math.sin(phase * 0.5) * 0.03;
 
-          // Knee flexion:
-          // Stance (sinP >= 0): slight cushioning flex 0.12 - 0.28 rad
-          // Swing (sinP < 0): knee flexes sharply (up to 1.42 rad in sprint) to tuck heel and clear pavement!
           const maxKneeSwing = isSprinting ? 1.42 : 0.98;
           const shinX = sinP < 0
             ? 0.12 + maxKneeSwing * Math.pow(-sinP, 1.25)
             : 0.12 + 0.18 * sinP;
 
-          // Foot / Ankle angle:
           const footX = -cosP * (isSprinting ? 0.38 : 0.26) + (sinP > 0 ? 0.12 * sinP : 0);
 
           return { thighX, thighZ, shinX, footX };
@@ -989,11 +1342,48 @@ export class SpidermanCharacter {
         r.leftShin.rotation.x = damp(r.leftShin.rotation.x, legL.shinX);
         r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, legL.footX);
 
-        // Hips vertical bounce: peaks at mid-stance, dips at step transition
+        // Hips vertical bounce
         const hipBounce = -Math.cos(this.stridePhase * 2) * (isSprinting ? 0.045 : 0.025);
-        r.hips.position.y = damp(r.hips.position.y, 0.95 + hipBounce);
+        r.hips.position.y = damp(r.hips.position.y, 0.98 + hipBounce);
+      } else if (isInCombat) {
+        // --- INSOMNIAC SPIDER-MAN COMBAT STANCE ---
+        // Clenched fists guarding chin, low athletic spring-loaded knees, agile bob & weave
+        this.prevFootstepSide = null;
+        const combatSway = Math.sin(this.animTime * 5.5);
+        const combatBreath = Math.sin(this.animTime * 3.5) * 0.02;
+
+        r.hips.position.y = damp(r.hips.position.y, 0.91 + combatBreath);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.28 + combatBreath);
+        r.spineLumbar.rotation.y = damp(r.spineLumbar.rotation.y, combatSway * 0.08);
+        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.16);
+        r.spineThorax.rotation.y = damp(r.spineThorax.rotation.y, combatSway * 0.12);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.22);
+        r.head.rotation.y = damp(r.head.rotation.y, -combatSway * 0.08);
+
+        // Right Arm: Chin-protection guard
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.85);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.25);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -1.45);
+        r.rightHand.rotation.x = damp(r.rightHand.rotation.x, -0.3);
+
+        // Left Arm: Lead probing guard
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -1.25);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.3);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -1.15);
+        r.leftHand.rotation.x = damp(r.leftHand.rotation.x, 0.2);
+
+        // Spring-loaded athletic combat leg stance (weight shifting)
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -0.35 + combatSway * 0.05);
+        r.rightThigh.rotation.z = damp(r.rightThigh.rotation.z, -0.15);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.52);
+        r.rightFoot.rotation.x = damp(r.rightFoot.rotation.x, -0.12);
+
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.25 - combatSway * 0.05);
+        r.leftThigh.rotation.z = damp(r.leftThigh.rotation.z, 0.15);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.38);
+        r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, -0.05);
       } else {
-        // SPIDER ALERT IDLE (Low center of gravity, hands ready)
+        // SPIDER ALERT IDLE (Exact boot sole flush alignment with rooftops)
         this.prevFootstepSide = null;
         const breath = Math.sin(this.animTime * 2.5) * 0.03;
         r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.12 + breath);
@@ -1002,7 +1392,6 @@ export class SpidermanCharacter {
         r.hips.rotation.y = damp(r.hips.rotation.y, 0);
         r.head.rotation.x = damp(r.head.rotation.x, -breath);
 
-        // Arms hanging naturally with slight forward forearm flexion
         r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 0.1);
         r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.15);
         r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.35);
@@ -1011,7 +1400,6 @@ export class SpidermanCharacter {
         r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.15);
         r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.35);
 
-        // Legs in relaxed athletic stance
         r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, 0.08);
         r.rightThigh.rotation.z = damp(r.rightThigh.rotation.z, -0.05);
         r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.12);
@@ -1022,39 +1410,70 @@ export class SpidermanCharacter {
         r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.12);
         r.leftFoot.rotation.x = damp(r.leftFoot.rotation.x, 0.0);
 
-        r.hips.position.y = damp(r.hips.position.y, 0.95 + breath * 0.06);
+        // Calibrated baseline: boot sole bottom sits exactly flush on roof surface
+        r.hips.position.y = damp(r.hips.position.y, 0.98 + Math.max(0, breath * 0.03));
       }
     }
 
-    // --- 4-HIT ACROBATIC MARTIAL ARTS COMBO OVERRIDE ---
+    // --- 4-HIT INSOMNIAC MARTIAL ARTS COMBO + AERIAL SLAM OVERRIDE ---
     if (this.meleeTimer > 0) {
-      if (this.comboIndex === 0) {
-        // Strike 1: Left Quick Jab (Left shoulder drives, fist punches forward)
-        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -1.5, 35);
-        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.1, 35);
-        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.5, 30);
-        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -1.2, 30);
-        r.spineThorax.rotation.y = damp(r.spineThorax.rotation.y, 0.45, 35);
+      if (this.comboIndex === 99) {
+        // SPECIAL: Aerial Web-Slam / Downward Hammerfist Strike!
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.85, 40);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.75, 40);
+        // Both fists clasped driving straight down
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.9, 40);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.1, 40);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.2, 40);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -0.9, 40);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.1, 40);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.2, 40);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -0.6, 40);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.2, 40);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, -0.6, 40);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 1.2, 40);
+      } else if (this.comboIndex === 0) {
+        // Strike 1: Left Speed Jab (Удар 1: кулак - резкий прямой выпад левой рукой, правая у подбородка)
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -1.68, 42);
+        r.leftUpperArm.rotation.z = damp(r.leftUpperArm.rotation.z, 0.08, 42);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.05, 42);
+        r.leftHand.rotation.x = damp(r.leftHand.rotation.x, 0.1, 42);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -0.65, 35);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -1.35, 35);
+        r.spineThorax.rotation.y = damp(r.spineThorax.rotation.y, 0.52, 42);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.15, 35);
       } else if (this.comboIndex === 1) {
-        // Strike 2: Right Heavy Cross (Torso twist, right fist lunges forward)
-        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -1.6, 35);
-        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.05, 35);
-        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -0.4, 30);
-        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -1.2, 30);
-        r.spineThorax.rotation.y = damp(r.spineThorax.rotation.y, -0.5, 35);
+        // Strike 2: Right Spinning Elbow Strike (Удар 2: локоть - сокрушительный круговой удар локтем с разворотом торса)
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -1.55, 42);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.75, 42);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -1.85, 42);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -0.55, 35);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -1.45, 35);
+        r.spineThorax.rotation.y = damp(r.spineThorax.rotation.y, -0.85, 42);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, 0.22, 35);
       } else if (this.comboIndex === 2) {
-        // Strike 3: Acrobatic High Roundhouse Kick (Body banks, right leg sweeps in high kick)
-        r.spineThorax.rotation.z = damp(r.spineThorax.rotation.z, 0.5, 35);
-        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.6, 35);
-        r.rightThigh.rotation.z = damp(r.rightThigh.rotation.z, -0.8, 35);
-        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 0.1, 35);
-        r.hips.position.y = damp(r.hips.position.y, 1.2, 30);
+        // Strike 3: Acrobatic Flying Knee / Jump Kick (Удар 3: прыжок и удар коленом в корпус с отрывом от земли)
+        r.hips.position.y = damp(r.hips.position.y, 1.28, 40);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -1.85, 42);
+        r.rightShin.rotation.x = damp(r.rightShin.rotation.x, 1.45, 42);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.45, 35);
+        r.leftShin.rotation.x = damp(r.leftShin.rotation.x, 0.65, 35);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, 0.65, 35);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, -0.95, 35);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.4, 35);
+        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, 0.28, 40);
       } else {
-        // Strike 4: Rising Uppercut (Right fist drives vertically, hero springs upward)
-        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -2.4, 35);
-        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.6, 35);
-        r.spineThorax.rotation.x = damp(r.spineThorax.rotation.x, -0.3, 30);
-        r.hips.position.y = damp(r.hips.position.y, 1.35, 30);
+        // Strike 4: Insomniac Rising Uppercut Finisher (Удар 4: мощнейший восходящий апперкот, подбрасывающий врага)
+        r.hips.position.y = damp(r.hips.position.y, 1.45, 40);
+        r.rightUpperArm.rotation.x = damp(r.rightUpperArm.rotation.x, -2.6, 45);
+        r.rightUpperArm.rotation.z = damp(r.rightUpperArm.rotation.z, -0.15, 45);
+        r.rightForearm.rotation.x = damp(r.rightForearm.rotation.x, -0.45, 45);
+        r.leftUpperArm.rotation.x = damp(r.leftUpperArm.rotation.x, 0.75, 35);
+        r.leftForearm.rotation.x = damp(r.leftForearm.rotation.x, -0.65, 35);
+        r.spineLumbar.rotation.x = damp(r.spineLumbar.rotation.x, -0.35, 42);
+        r.head.rotation.x = damp(r.head.rotation.x, -0.65, 42);
+        r.rightThigh.rotation.x = damp(r.rightThigh.rotation.x, -0.85, 38);
+        r.leftThigh.rotation.x = damp(r.leftThigh.rotation.x, 0.35, 38);
       }
     }
 

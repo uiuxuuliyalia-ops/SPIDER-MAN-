@@ -70,6 +70,18 @@ export const SpiderGame: React.FC = () => {
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [cameraMode, setCameraMode] = useState<'dynamic' | 'cinematic'>('dynamic');
   const [missionComplete, setMissionComplete] = useState(false);
+  const [trickBadge, setTrickBadge] = useState<string | null>(null);
+  const [nearestTargetM, setNearestTargetM] = useState<number | null>(null);
+  const trickTimeoutRef = useRef<number | null>(null);
+  const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const triggerTrickBanner = (text: string) => {
+    setTrickBadge(text);
+    if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
+    trickTimeoutRef.current = window.setTimeout(() => {
+      setTrickBadge(null);
+    }, 1500);
+  };
 
   // References for render loop & 3D scene elements
   const spidermanRef = useRef<SpidermanCharacter | null>(null);
@@ -90,6 +102,7 @@ export const SpiderGame: React.FC = () => {
     jump: false,
     sprint: false,
     webSwing: false,
+    crouch: false,
   });
 
   // Camera angles & target angles for silky-smooth damping
@@ -111,6 +124,24 @@ export const SpiderGame: React.FC = () => {
     sensitivity: cameraSensitivity,
     smoothing: cameraSmoothing,
   });
+
+  const comboRef = useRef(0);
+  const webFluidRef = useRef(6);
+  const cameraModeRef = useRef<'dynamic' | 'cinematic'>('dynamic');
+  const isMenuOpenRef = useRef(false);
+  const currentSuitRef = useRef<SuitType>('classic');
+
+  useEffect(() => {
+    cameraModeRef.current = cameraMode;
+  }, [cameraMode]);
+
+  useEffect(() => {
+    isMenuOpenRef.current = isMenuOpen;
+  }, [isMenuOpen]);
+
+  useEffect(() => {
+    currentSuitRef.current = currentSuit;
+  }, [currentSuit]);
 
   useEffect(() => {
     cameraConfigRef.current = {
@@ -157,6 +188,8 @@ export const SpiderGame: React.FC = () => {
   });
 
   const comboTimerRef = useRef<number | null>(null);
+  const combatTimerRef = useRef<number>(0);
+  const spiderSenseActiveRef = useRef<boolean>(false);
   const t = translations[currentLang];
 
   const handleSelectLang = (lang: Language) => {
@@ -216,6 +249,7 @@ export const SpiderGame: React.FC = () => {
     if (count > 0) {
       setCombo((prev) => {
         const next = prev + count;
+        comboRef.current = next;
         if (next >= 12) setComboRating('ULTIMATE SPIDER-MAN!');
         else if (next >= 8) setComboRating('SPECTACULAR!');
         else if (next >= 4) setComboRating('AMAZING!');
@@ -225,6 +259,7 @@ export const SpiderGame: React.FC = () => {
 
       if (comboTimerRef.current) window.clearTimeout(comboTimerRef.current);
       comboTimerRef.current = window.setTimeout(() => {
+        comboRef.current = 0;
         setCombo(0);
         setComboRating('');
       }, 4000);
@@ -236,13 +271,18 @@ export const SpiderGame: React.FC = () => {
         if (updated === 0) setMissionComplete(true);
         return updated;
       });
+      webFluidRef.current = 6;
       setWebFluid(6);
     }
   }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setWebFluid((f) => Math.min(6, f + 1));
+      setWebFluid((f) => {
+        const next = Math.min(6, f + 1);
+        webFluidRef.current = next;
+        return next;
+      });
     }, 3200);
     return () => clearInterval(timer);
   }, []);
@@ -349,8 +389,26 @@ export const SpiderGame: React.FC = () => {
 
     const sampleBuildings = city.buildings.slice(0, 10);
     sampleBuildings.forEach((b) => {
-      enemies.spawnBandit(b.center.x + (Math.random() - 0.5) * 12, b.roofY, b.center.z + (Math.random() - 0.5) * 12);
-      enemies.spawnBandit(b.center.x + (Math.random() - 0.5) * 12, b.roofY, b.center.z + (Math.random() - 0.5) * 12);
+      const bounds = {
+        minX: b.box.min.x + 1.5,
+        maxX: b.box.max.x - 1.5,
+        minZ: b.box.min.z + 1.5,
+        maxZ: b.box.max.z - 1.5,
+      };
+      const spanX = Math.max(2, (bounds.maxX - bounds.minX) * 0.6);
+      const spanZ = Math.max(2, (bounds.maxZ - bounds.minZ) * 0.6);
+      enemies.spawnBandit(
+        b.center.x + (Math.random() - 0.5) * spanX,
+        b.roofY,
+        b.center.z + (Math.random() - 0.5) * spanZ,
+        bounds
+      );
+      enemies.spawnBandit(
+        b.center.x + (Math.random() - 0.5) * spanX,
+        b.roofY,
+        b.center.z + (Math.random() - 0.5) * spanZ,
+        bounds
+      );
     });
     setBanditsRemaining(enemies.bandits.length);
 
@@ -392,11 +450,15 @@ export const SpiderGame: React.FC = () => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Escape') {
         e.preventDefault();
-        inputRef.current = { forward: 0, strafe: 0, jump: false, sprint: false, webSwing: false };
+        inputRef.current = { forward: 0, strafe: 0, jump: false, sprint: false, webSwing: false, crouch: false };
         if (document.pointerLockElement) {
           document.exitPointerLock?.();
         }
-        setIsMenuOpen((v) => !v);
+        setIsMenuOpen((v) => {
+          const next = !v;
+          isMenuOpenRef.current = next;
+          return next;
+        });
         return;
       }
       if (e.code === 'Space') e.preventDefault();
@@ -442,8 +504,9 @@ export const SpiderGame: React.FC = () => {
         }
         case 'KeyF': {
           // ATTACK 2: RAPID WEB PELLETS
-          if (webFluid > 0) {
-            setWebFluid((f) => Math.max(0, f - 1));
+          if (webFluidRef.current > 0) {
+            webFluidRef.current = Math.max(0, webFluidRef.current - 1);
+            setWebFluid(webFluidRef.current);
             const aimAngle = Math.atan2(
               -Math.sin(camAngleRef.current.yaw),
               -Math.cos(camAngleRef.current.yaw)
@@ -463,20 +526,67 @@ export const SpiderGame: React.FC = () => {
           break;
         }
         case 'KeyQ': {
-          const zipDir = new THREE.Vector3(
-            -Math.sin(camAngleRef.current.yaw),
-            0.2,
-            -Math.cos(camAngleRef.current.yaw)
-          ).normalize();
-          physics.velocity.addScaledVector(zipDir, 28);
-          physics.state = 'AIR';
-          soundEngine.playWebShoot();
-          soundEngine.playJump();
-          spiderman.triggerWebPellet();
+          // INSOMNIAC ACROBATIC COMBAT DODGE & EVASIVE COUNTER
+          physics.releaseWeb(false);
+          let dodgeDirName: 'left' | 'right' | 'back' | 'forward' = 'left';
+          const forwardVec = new THREE.Vector3(-Math.sin(camAngleRef.current.yaw), 0, -Math.cos(camAngleRef.current.yaw));
+          const rightVec = new THREE.Vector3(Math.cos(camAngleRef.current.yaw), 0, -Math.sin(camAngleRef.current.yaw));
+          const dodgeVec = new THREE.Vector3();
+
+          if (inputRef.current.strafe === -1) {
+            dodgeVec.sub(rightVec);
+            dodgeDirName = 'left';
+          } else if (inputRef.current.strafe === 1) {
+            dodgeVec.add(rightVec);
+            dodgeDirName = 'right';
+          } else if (inputRef.current.forward === 1) {
+            dodgeVec.add(forwardVec);
+            dodgeDirName = 'forward';
+          } else if (inputRef.current.forward === -1) {
+            dodgeVec.sub(forwardVec);
+            dodgeDirName = 'back';
+          } else {
+            // Default evasive back-slip
+            dodgeVec.sub(forwardVec);
+            dodgeDirName = 'back';
+          }
+
+          physics.triggerDodge(dodgeVec);
+          spiderman.triggerDodge(dodgeDirName);
+          combatTimerRef.current = 4.0;
+
+          // Check if dodging during Spider-Sense Danger Alert: PERFECT DODGE!
+          if (spiderSenseActiveRef.current) {
+            soundEngine.playWebWrap();
+            triggerTrickBanner('⚡ PERFECT DODGE! +100');
+            // Counter-shot webbing nearest attacking bandit
+            const attackingBandit = enemies.bandits.find(
+              (b) => (b.state === 'ATTACK_PREP' || b.state === 'CHASE') && b.position.distanceTo(physics.position) < 12
+            );
+            if (attackingBandit) {
+              attackingBandit.state = 'WEB_WRAPPED';
+              attackingBandit.webTimer = 4.0;
+              attackingBandit.cocoonMesh.visible = true;
+              attackingBandit.health = Math.max(0, attackingBandit.health - 25);
+              enemies.spawnComicPopup(attackingBandit.position, 'WEB-TRAP!');
+            }
+            registerHit(1, 0);
+          } else {
+            triggerTrickBanner('💨 ACROBATIC DODGE');
+          }
           break;
         }
         case 'KeyC':
-          setCameraMode((m) => (m === 'dynamic' ? 'cinematic' : 'dynamic'));
+        case 'ControlLeft':
+        case 'ControlRight':
+          inputRef.current.crouch = true;
+          break;
+        case 'KeyV':
+          setCameraMode((m) => {
+            const next = m === 'dynamic' ? 'cinematic' : 'dynamic';
+            cameraModeRef.current = next;
+            return next;
+          });
           break;
         case 'KeyM':
           setIsMuted((m) => {
@@ -515,6 +625,11 @@ export const SpiderGame: React.FC = () => {
         case 'ShiftRight':
           inputRef.current.sprint = false;
           break;
+        case 'KeyC':
+        case 'ControlLeft':
+        case 'ControlRight':
+          inputRef.current.crouch = false;
+          break;
         case 'KeyE':
           inputRef.current.webSwing = false;
           physics.releaseWeb(false);
@@ -552,11 +667,11 @@ export const SpiderGame: React.FC = () => {
       }
     };
 
-    // --- MOUSE CLICK: ATTACK 1 (LMB) & ATTACK 3 (RMB) ---
+    // --- MOUSE CLICK: ATTACK 1 (LMB) & SMART CONTEXTUAL RMB ---
     const onMouseDown = (e: MouseEvent) => {
-      if (isMenuOpen) return;
+      if (isMenuOpenRef.current) return;
       if (e.button === 0) {
-        // LEFT CLICK: MARTIAL ARTS 4-HIT COMBO
+        // LEFT CLICK: MARTIAL ARTS 6-HIT COMBO OR AERIAL WEB-SLAM
         if (document.pointerLockElement !== container) {
           container.requestPointerLock?.();
         }
@@ -567,19 +682,37 @@ export const SpiderGame: React.FC = () => {
         physics.facingAngle = aimAngle;
         spiderman.mesh.rotation.y = aimAngle;
 
-        // Kinetic martial arts step-in lunge forward
-        const lunge = new THREE.Vector3(-Math.sin(aimAngle), 0, -Math.cos(aimAngle)).multiplyScalar(4.2);
-        physics.velocity.add(lunge);
+        const isAir = physics.state === 'AIR' || physics.isDiving;
+        const currentComboStep = isAir ? 99 : comboRef.current % 4;
 
-        spiderman.triggerMeleeCombo(combo);
+        if (isAir) {
+          // Aerial web slam: plunge down with high kinetic punch!
+          physics.velocity.y = -22;
+          physics.isDiving = true;
+          triggerTrickBanner('💥 AERIAL WEB-SLAM!');
+        } else {
+          // Kinetic martial arts step-in lunge forward
+          const lunge = new THREE.Vector3(-Math.sin(aimAngle), 0, -Math.cos(aimAngle)).multiplyScalar(4.5);
+          physics.velocity.add(lunge);
+          if (currentComboStep === 3) {
+            triggerTrickBanner('⚡ UPPERCUT FINISHER! +150');
+          } else if (currentComboStep === 2) {
+            triggerTrickBanner('💥 FLYING KNEE STRIKE!');
+          } else if (currentComboStep === 1) {
+            triggerTrickBanner('💥 ELBOW STRIKE!');
+          }
+        }
+
+        spiderman.triggerMeleeCombo(currentComboStep);
         const { hitCount, defeatedCount } = enemies.performMeleeCombo(
           physics.position,
           physics.facingAngle,
-          combo
+          currentComboStep,
+          isAir
         );
         registerHit(hitCount, defeatedCount);
       } else if (e.button === 2) {
-        // RIGHT CLICK: WEB-ZIP TO BUILDING ROOF / PERCH (OR WEB COCOON BLAST FALLBACK)
+        // RIGHT CLICK: SMART CONTEXTUAL WEB-STRIKE (COMBAT) / POINT-ZIP (PERCH) / AIR WEB-ZIP
         e.preventDefault();
         if (document.pointerLockElement !== container) {
           container.requestPointerLock?.();
@@ -591,24 +724,81 @@ export const SpiderGame: React.FC = () => {
           -Math.cos(camAngleRef.current.yaw)
         ).normalize();
 
-        const zipTarget = city.findZipTarget(physics.position, lookDir, 220);
+        // 1. COMBAT PRIORITY: Web-Strike against targeted or nearest facing enemy
+        const targetEnemy = enemies.findTargetEnemy(physics.position, lookDir, 45, 0.55);
+        if (targetEnemy) {
+          const aimAngle = Math.atan2(
+            targetEnemy.position.x - physics.position.x,
+            targetEnemy.position.z - physics.position.z
+          );
+          physics.facingAngle = aimAngle;
+          spiderman.mesh.rotation.y = aimAngle;
+          triggerTrickBanner('💥 WEB-STRIKE!');
+          physics.startWebStrike(targetEnemy.position.clone().add(new THREE.Vector3(0, 0.9, 0)), () => {
+            // When reaching enemy: deliver heavy flying impact!
+            targetEnemy.health -= 65;
+            targetEnemy.flinchTimer = 0.55;
+            const knockDir = targetEnemy.position.clone().sub(physics.position).normalize();
+            knockDir.y = 0.35;
+            targetEnemy.velocity.addScaledVector(knockDir, 24);
+            soundEngine.playPunch(3);
+            enemies.spawnComicPopup(targetEnemy.position, 'KAPOW!');
+
+            let defeated = 0;
+            if (targetEnemy.health <= 0) {
+              targetEnemy.health = 0;
+              targetEnemy.state = 'KNOCKED_OUT';
+              defeated = 1;
+              soundEngine.playDefeat();
+              targetEnemy.mesh.rotation.x = Math.PI / 2;
+              targetEnemy.position.y = targetEnemy.spawnPoint.y + 0.25;
+              targetEnemy.mesh.position.copy(targetEnemy.position);
+              targetEnemy.healthBarMesh.visible = false;
+            }
+            registerHit(1, defeated);
+          });
+          return;
+        }
+
+        // 2. TRAVERSAL PRIORITY: Point-Zip to nearby building rooftop / wall perch (within 85m)
+        const zipTarget = city.findZipTarget(physics.position, lookDir, 85);
         if (zipTarget) {
-          // Point-Zip directly to the building rooftop or wall!
           const aimAngle = Math.atan2(
             zipTarget.point.x - physics.position.x,
             zipTarget.point.z - physics.position.z
           );
           physics.facingAngle = aimAngle;
           spiderman.mesh.rotation.y = aimAngle;
-          physics.startZipToTarget(zipTarget);
+          physics.startZipToTarget(zipTarget, () => {
+            const { hitCount, defeatedCount } = enemies.hitBanditAtPosition(zipTarget.point, 4.5, 30);
+            registerHit(hitCount, defeatedCount);
+          });
           spiderman.triggerWebPellet();
+          triggerTrickBanner('⚡ POINT-ZIP!');
+          return;
+        }
 
-          // Kinetic impact: knock back and defeat bandits situated right at the landing zone
-          const { hitCount, defeatedCount } = enemies.hitBanditAtPosition(zipTarget.point, 4.5, 60);
-          registerHit(hitCount, defeatedCount);
-        } else if (webFluid >= 2) {
-          // Combat fallback: shoot wide web cocoon net if aiming away from buildings
-          setWebFluid((f) => Math.max(0, f - 2));
+        // 3. MID-AIR SLINGSHOT / AIR WEB-ZIP (When in mid-air with no target nearby)
+        if (physics.state === 'AIR' || physics.state === 'SWINGING') {
+          physics.releaseWeb(false);
+          const zipDir = new THREE.Vector3(
+            -Math.sin(camAngleRef.current.yaw),
+            0.16,
+            -Math.cos(camAngleRef.current.yaw)
+          ).normalize();
+          physics.velocity.copy(zipDir).multiplyScalar(32);
+          physics.isAirTricking = true;
+          spiderman.triggerWebPellet();
+          soundEngine.playWebShoot();
+          soundEngine.playJump();
+          triggerTrickBanner('🕸️ AIR WEB-ZIP!');
+          return;
+        }
+
+        // 4. GROUND FALLBACK: Web Cocoon blast / net
+        if (webFluidRef.current >= 1) {
+          webFluidRef.current = Math.max(0, webFluidRef.current - 1);
+          setWebFluid(webFluidRef.current);
           const aimAngle = Math.atan2(
             -Math.sin(camAngleRef.current.yaw),
             -Math.cos(camAngleRef.current.yaw)
@@ -645,12 +835,12 @@ export const SpiderGame: React.FC = () => {
       const isLocked = document.pointerLockElement === container;
       setIsPointerLocked(isLocked);
       if (!isLocked) {
-        inputRef.current = { forward: 0, strafe: 0, jump: false, sprint: false, webSwing: false };
+        inputRef.current = { forward: 0, strafe: 0, jump: false, sprint: false, webSwing: false, crouch: false };
       }
     };
 
     const onBlur = () => {
-      inputRef.current = { forward: 0, strafe: 0, jump: false, sprint: false, webSwing: false };
+      inputRef.current = { forward: 0, strafe: 0, jump: false, sprint: false, webSwing: false, crouch: false };
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -683,8 +873,18 @@ export const SpiderGame: React.FC = () => {
       animFrameId = requestAnimationFrame(animate);
       const dt = clock.getDelta();
 
-      if (!isMenuOpen) {
+      if (!isMenuOpenRef.current) {
         physics.update(dt, inputRef.current, camAngleRef.current.yaw, city);
+        city.update(dt);
+      }
+
+      // Dynamic stunt banners
+      if (physics.isPointLaunching && trickBadge !== '⚡ POINT LAUNCH') {
+        triggerTrickBanner('⚡ POINT LAUNCH +100');
+      } else if (physics.isDiving && trickBadge !== '🦅 SWAN DIVE') {
+        triggerTrickBanner('🦅 SWAN DIVE');
+      } else if (physics.isAirTricking && trickBadge !== '🌪️ AIR TRICK') {
+        triggerTrickBanner('🌪️ AIR TRICK +50');
       }
 
       spiderman.mesh.position.copy(physics.position);
@@ -695,18 +895,35 @@ export const SpiderGame: React.FC = () => {
       while (diff > Math.PI) diff -= Math.PI * 2;
       spiderman.mesh.rotation.y += diff * Math.min(1, dt * 18);
 
-      // Dynamic body pitch (athletic lean into wall run or aerodynamic air flight)
+      // Dynamic body pitch (athletic lean into wall run, swan dive, or acrobatic tumble)
       let targetPitch = 0;
       if (physics.state === 'WALL_RUN') {
         targetPitch = 0.35; // Athletic forward lean against the wall facade
       } else if (physics.state === 'WALL_STICK') {
         targetPitch = 0.15; // 4-point spider cling
       } else if (physics.state === 'AIR') {
-        targetPitch = Math.max(-0.4, Math.min(0.4, -physics.velocity.y * 0.012));
+        if (physics.isDiving) {
+          targetPitch = 0.68; // Swan-dive looking down towards the streets
+        } else if (physics.isAirTricking) {
+          targetPitch = Math.sin(physics.airTrickRotation) * 0.45;
+        } else if (physics.isAcrobaticLeap) {
+          targetPitch = -0.18; // Athletic forward leap launch angle
+        } else {
+          targetPitch = Math.max(-0.35, Math.min(0.35, -physics.velocity.y * 0.012));
+        }
       }
       spiderman.mesh.rotation.x = THREE.MathUtils.damp(
         spiderman.mesh.rotation.x,
         targetPitch,
+        18,
+        dt
+      );
+
+      // Damp body roll: reset smoothly to 0 on jump / ground, bank into turns only during swinging
+      const targetRoll = physics.state === 'SWINGING' ? physics.bankAngle : 0;
+      spiderman.mesh.rotation.z = THREE.MathUtils.damp(
+        spiderman.mesh.rotation.z,
+        targetRoll,
         14,
         dt
       );
@@ -715,6 +932,14 @@ export const SpiderGame: React.FC = () => {
         physics.velocity.x * physics.velocity.x + physics.velocity.z * physics.velocity.z
       );
       const totalSpeed = physics.velocity.length();
+
+      if (combatTimerRef.current > 0) {
+        combatTimerRef.current -= dt;
+      }
+      const nearestActiveEnemy = enemies.bandits.find(
+        (b) => b.state !== 'KNOCKED_OUT' && b.position.distanceTo(physics.position) < 18
+      );
+      const isInCombat = !!nearestActiveEnemy || combatTimerRef.current > 0;
 
       spiderman.update(
         dt,
@@ -725,21 +950,26 @@ export const SpiderGame: React.FC = () => {
         physics.state === 'WALL_RUN',
         physics.activeAnchorSide,
         physics.bankAngle,
-        physics.superheroLandingTimer
+        physics.superheroLandingTimer,
+        physics.isDiving,
+        physics.isAirTricking,
+        physics.isCrouching,
+        isInCombat,
+        physics.isAcrobaticLeap
       );
 
-      // VOLUMETRIC WEB CYLINDERS (Twin webs during Point-Zip, single dynamic web during swinging)
+      // VOLUMETRIC WEB CYLINDERS (Twin webs during Point-Zip & Web-Strike, single web during swing)
       const wristLeft = new THREE.Vector3();
       const wristRight = new THREE.Vector3();
 
-      if (physics.state === 'ZIP_TO_WALL' && physics.zipTarget && webMesh && webMesh2) {
-        // TWIN-WEB POINT ZIP: Two parallel high-velocity webs stretch from wrists to target building
+      if (((physics.state === 'ZIP_TO_WALL' && physics.zipTarget) || (physics.state === 'WEB_STRIKE' && physics.webStrikeTarget)) && webMesh && webMesh2) {
+        // TWIN-WEB POINT ZIP / WEB-STRIKE: Two parallel high-velocity webs stretch from wrists to target
         webMesh.visible = true;
         webMesh2.visible = true;
 
         spiderman.getLeftWristPosition(wristLeft);
         spiderman.getRightWristPosition(wristRight);
-        const targetPt = physics.zipTarget.point;
+        const targetPt = physics.state === 'WEB_STRIKE' ? physics.webStrikeTarget! : physics.zipTarget!.point;
 
         // Left web
         webMid.copy(wristLeft).add(targetPt).multiplyScalar(0.5);
@@ -757,12 +987,16 @@ export const SpiderGame: React.FC = () => {
         webMesh2.scale.set(1, distR, 1);
         webMesh2.quaternion.setFromUnitVectors(upAxis, webDir.normalize());
 
-        // Reticle locks onto building landing target in vibrant gold
+        // Reticle locks onto landing target or enemy in vibrant color
         reticleGroup.visible = true;
         reticleGroup.position.copy(targetPt);
-        reticleGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), physics.zipTarget.normal);
+        if (physics.state === 'ZIP_TO_WALL' && physics.zipTarget) {
+          reticleGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), physics.zipTarget.normal);
+        } else {
+          reticleGroup.quaternion.copy(camera.quaternion);
+        }
         reticleRing.scale.setScalar(1.25);
-        (reticleRing.material as THREE.MeshBasicMaterial).color.setHex(0xf59e0b);
+        (reticleRing.material as THREE.MeshBasicMaterial).color.setHex(physics.state === 'WEB_STRIKE' ? 0xef4444 : 0xf59e0b);
       } else if (physics.state === 'SWINGING' && physics.activeAnchor && webMesh) {
         // SINGLE DYNAMIC WEB LINE FOR PENDULUM SWINGING
         webMesh.visible = true;
@@ -790,17 +1024,25 @@ export const SpiderGame: React.FC = () => {
         webMesh.visible = false;
         if (webMesh2) webMesh2.visible = false;
 
-        // Prospective targeting: check Point-Zip (RMB) and Web-Swing (E) anchors
+        // Prospective targeting: check Enemy Web-Strike (RMB), Point-Zip (RMB), or Web-Swing (E) anchors
         const lookDir = new THREE.Vector3(
           -Math.sin(camAngleRef.current.yaw),
           Math.tan(-camAngleRef.current.pitch + 0.05),
           -Math.cos(camAngleRef.current.yaw)
         ).normalize();
 
-        const prospectiveZip = city.findZipTarget(physics.position, lookDir, 220);
+        const prospectiveEnemy = enemies.findTargetEnemy(physics.position, lookDir, 45, 0.55);
+        const prospectiveZip = city.findZipTarget(physics.position, lookDir, 85);
         const prospectiveSwing = city.findBestWebAnchor(physics.position, lookDir, 160);
 
-        if (prospectiveZip && physics.state !== 'WALL_RUN' && physics.state !== 'WALL_STICK') {
+        if (prospectiveEnemy) {
+          // Crimson combat targeting lock over bandit!
+          reticleGroup.visible = true;
+          reticleGroup.position.copy(prospectiveEnemy.position).add(new THREE.Vector3(0, 1.1, 0));
+          reticleGroup.quaternion.copy(camera.quaternion);
+          reticleRing.scale.setScalar(1 + Math.sin(clock.getElapsedTime() * 14) * 0.2);
+          (reticleRing.material as THREE.MeshBasicMaterial).color.setHex(0xef4444);
+        } else if (prospectiveZip && physics.state !== 'WALL_RUN' && physics.state !== 'WALL_STICK') {
           reticleGroup.visible = true;
           reticleGroup.position.copy(prospectiveZip.point);
           reticleGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), prospectiveZip.normal);
@@ -820,17 +1062,21 @@ export const SpiderGame: React.FC = () => {
       }
 
       // UPDATE BANDITS & COMBAT
-      if (!isMenuOpen) {
+      if (!isMenuOpenRef.current) {
         enemies.update(
           dt,
           physics.position,
           camera,
           (dangerAlert) => {
+            spiderSenseActiveRef.current = dangerAlert;
             setSpiderSenseActive(dangerAlert);
             spiderman.setSpiderSense(dangerAlert);
+            if (dangerAlert) combatTimerRef.current = 4.0;
           },
           (damage) => {
+            if (physics.isDodging) return; // Invulnerable during acrobatic dodge!
             setHealth((h) => Math.max(0, h - damage));
+            combatTimerRef.current = 4.0;
           }
         );
       }
@@ -867,7 +1113,7 @@ export const SpiderGame: React.FC = () => {
 
       // CAMERA FOLLOW & BUILDING COLLISION AVOIDANCE
       const baseDist =
-        cameraMode === 'cinematic' ? 8.5 : 6.2 + Math.min(totalSpeed * 0.08, 3.2);
+        cameraModeRef.current === 'cinematic' ? 8.5 : 6.2 + Math.min(totalSpeed * 0.08, 3.2);
       let targetDist = baseDist;
 
       // Prevent camera from clipping through nearby skyscraper walls
@@ -925,14 +1171,199 @@ export const SpiderGame: React.FC = () => {
       camTarget.set(physics.position.x, physics.position.y + 1.2, physics.position.z);
       camera.lookAt(camTarget);
 
-      const targetFov = 62 + Math.min(totalSpeed * 0.55, 24);
-      camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 8, dt);
+      const diveFov = physics.isDiving ? 12 : 0;
+      const launchFov = physics.isPointLaunching ? 15 : 0;
+      const targetFov = 62 + Math.min(totalSpeed * 0.55, 24) + diveFov + launchFov;
+      camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 9, dt);
       camera.updateProjectionMatrix();
 
       setSpeedKmh(Math.round(totalSpeed * 3.6));
       setAltitudeM(Math.round(physics.position.y));
       setIsSwinging(physics.state === 'SWINGING');
       setIsWallRunning(physics.state === 'WALL_RUN');
+
+      // --- DYNAMIC ROTATING RADAR RENDERING (CAMERA-RELATIVE COORDS & LIVE DISTANCE) ---
+      if (radarCanvasRef.current) {
+        const cvs = radarCanvasRef.current;
+        const ctx = cvs.getContext('2d');
+        if (ctx) {
+          const w = cvs.width;
+          const h = cvs.height;
+          const cx = w / 2;
+          const cy = h / 2;
+          const R = cx - 6;
+          const maxRadarRange = 140; // 140 meters detection sphere
+
+          ctx.clearRect(0, 0, w, h);
+
+          // Circular clip
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, R, 0, Math.PI * 2);
+          ctx.clip();
+
+          // Dark radar grid background
+          const bgGrad = ctx.createRadialGradient(cx, cy, 6, cx, cy, R);
+          bgGrad.addColorStop(0, '#091528');
+          bgGrad.addColorStop(0.85, '#030712');
+          bgGrad.addColorStop(1, '#020617');
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, w, h);
+
+          // Range rings (35m, 70m, 105m, 140m)
+          ctx.lineWidth = 1;
+          for (const distM of [35, 70, 105, 140]) {
+            const ringR = (distM / maxRadarRange) * (R - 2);
+            ctx.beginPath();
+            ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+            ctx.strokeStyle = distM === 140 ? 'rgba(56, 189, 248, 0.45)' : 'rgba(56, 189, 248, 0.16)';
+            ctx.setLineDash(distM === 140 ? [] : [2, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          // Crosshairs
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - R);
+          ctx.lineTo(cx, cy + R);
+          ctx.moveTo(cx - R, cy);
+          ctx.lineTo(cx + R, cy);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.14)';
+          ctx.stroke();
+
+          // Forward Camera Vision Cone (translucent sector pointing forward/UP)
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, R, -Math.PI / 2 - 0.42, -Math.PI / 2 + 0.42);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+          ctx.fill();
+
+          // Rotating radar sweep line
+          const sweepAngle = ((clock.getElapsedTime() * 2.8) % (Math.PI * 2)) - Math.PI / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(sweepAngle) * R, cy + Math.sin(sweepAngle) * R);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.40)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Camera yaw for orientation transform
+          const camYaw = camAngleRef.current.yaw;
+          const px = physics.position.x;
+          const pz = physics.position.z;
+          const py = physics.position.y;
+
+          let nearestDist = Infinity;
+
+          // Render live bandit blips
+          for (const b of enemies.bandits) {
+            if (b.state === 'KNOCKED_OUT') continue;
+
+            const dx = b.position.x - px;
+            const dz = b.position.z - pz;
+            const dist = Math.hypot(dx, dz);
+            const dy = b.position.y - py;
+
+            if (dist < nearestDist) nearestDist = dist;
+
+            // Transform into camera view space:
+            // Camera forward in world: (-sin(camYaw), -cos(camYaw))
+            // Camera right in world: (cos(camYaw), -sin(camYaw))
+            const relX = dx * Math.cos(camYaw) - dz * Math.sin(camYaw);
+            const relForward = -dx * Math.sin(camYaw) - dz * Math.cos(camYaw);
+
+            // Scale to radar canvas coordinates
+            const maxClamp = R - 8;
+            const scale = (R - 10) / maxRadarRange;
+            let bx = cx + relX * scale;
+            let by = cy - relForward * scale;
+
+            const isClamped = dist > maxRadarRange;
+            if (isClamped) {
+              const ang = Math.atan2(-relForward, relX);
+              bx = cx + Math.cos(ang) * maxClamp;
+              by = cy + Math.sin(ang) * maxClamp;
+            }
+
+            const isWebbed = b.state === 'WEB_WRAPPED';
+            const isAlert = b.state === 'CHASE' || b.state === 'ATTACK_PREP' || b.state === 'ATTACK';
+
+            // Draw Blip
+            if (isWebbed) {
+              ctx.fillStyle = '#38bdf8';
+              ctx.beginPath();
+              ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
+              ctx.fill();
+            } else if (isAlert) {
+              const pulse = Math.sin(clock.getElapsedTime() * 12) * 1.5;
+              ctx.fillStyle = '#ef4444';
+              ctx.beginPath();
+              ctx.arc(bx, by, 4.5 + pulse, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#fca5a5';
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+            } else {
+              ctx.fillStyle = '#ef4444';
+              ctx.beginPath();
+              ctx.arc(bx, by, 3.8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#991b1b';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+
+            // Elevation Indicator (▲ on roof, ▼ on street)
+            if (dy > 4.5) {
+              ctx.fillStyle = '#fca5a5';
+              ctx.beginPath();
+              ctx.moveTo(bx, by - 6.5);
+              ctx.lineTo(bx - 3.5, by - 3);
+              ctx.lineTo(bx + 3.5, by - 3);
+              ctx.closePath();
+              ctx.fill();
+            } else if (dy < -4.5) {
+              ctx.fillStyle = '#fca5a5';
+              ctx.beginPath();
+              ctx.moveTo(bx, by + 6.5);
+              ctx.lineTo(bx - 3.5, by + 3);
+              ctx.lineTo(bx + 3.5, by + 3);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+
+          // Center Spider-Man Chevron (Pointing UP towards camera look direction)
+          ctx.fillStyle = '#38bdf8';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - 7);
+          ctx.lineTo(cx - 5.5, cy + 5);
+          ctx.lineTo(cx, cy + 2);
+          ctx.lineTo(cx + 5.5, cy + 5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.restore();
+
+          // Outer glowing radar bezel ring
+          ctx.beginPath();
+          ctx.arc(cx, cy, R, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+
+          // Update nearest target distance readout
+          if (nearestDist !== Infinity) {
+            setNearestTargetM(Math.round(nearestDist));
+          } else {
+            setNearestTargetM(null);
+          }
+        }
+      }
 
       renderer.render(scene, camera);
     };
@@ -955,7 +1386,7 @@ export const SpiderGame: React.FC = () => {
         container.removeChild(renderer.domElement);
       }
     };
-  }, [registerHit, cameraMode, combo, webFluid, isMenuOpen, currentSuit]);
+  }, [registerHit]);
 
   const resetHeroPosition = () => {
     if (physicsRef.current && cityRef.current) {
@@ -1020,9 +1451,19 @@ export const SpiderGame: React.FC = () => {
         </div>
       )}
 
-      {/* Speedlines on High Speed Swings */}
+      {/* Speedlines on High Speed Swings & Dives */}
       {speedKmh > 75 && (
         <div className="absolute inset-0 pointer-events-none z-10 bg-radial from-transparent via-transparent to-black/60 animate-speedlines" />
+      )}
+
+      {/* Acrobatic Parkour Stunt & Trick Banner */}
+      {trickBadge && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-bounce">
+          <div className="bg-gradient-to-r from-amber-500/90 via-red-600/95 to-amber-500/90 text-white font-comic text-xl px-5 py-1.5 rounded-2xl shadow-2xl border-2 border-yellow-300 tracking-wider flex items-center gap-2 backdrop-blur-md">
+            <Zap className="w-5 h-5 text-yellow-300 animate-spin" />
+            <span>{trickBadge}</span>
+          </div>
+        </div>
       )}
 
       {/* Minimalist Micro Reticle */}
@@ -1153,38 +1594,44 @@ export const SpiderGame: React.FC = () => {
           </button>
         </div>
 
-        {/* Compact Micro Radar */}
-        <div className="bg-black/75 backdrop-blur-2xl border border-white/10 rounded-xl p-2 shadow-2xl text-white flex flex-col gap-1 w-36">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+        {/* Rotating Micro Radar with View Direction & Accurate Proximity */}
+        <div className="bg-black/85 backdrop-blur-2xl border border-white/10 rounded-2xl p-2.5 shadow-2xl text-white flex flex-col items-center gap-1.5 w-36">
+          <div className="flex items-center justify-between w-full text-[11px] font-bold text-slate-300 px-0.5">
             <span className="flex items-center gap-1 text-red-400">
-              <Compass className="w-3 h-3 text-red-500 animate-pulse" />
+              <Compass className="w-3.5 h-3.5 text-red-500 animate-spin" style={{ animationDuration: '8s' }} />
               {t.crimeRadar}
             </span>
-            <span className="font-mono text-amber-400">
+            <span className="font-mono text-amber-400 font-extrabold text-xs">
               {banditsRemaining}
             </span>
           </div>
 
-          <div className="relative w-full h-16 bg-black/60 rounded-lg border border-white/5 flex items-center justify-center overflow-hidden">
-            <div className="absolute w-14 h-14 rounded-full border border-cyan-500/20" />
-            <div className="absolute w-8 h-8 rounded-full border border-cyan-500/30" />
-            <div className="w-2 h-2 bg-cyan-400 rounded-full border border-white shadow-xs shadow-cyan-400" />
-            {banditsRemaining > 0 && (
-              <>
-                <div className="absolute top-2.5 right-4 w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
-                <div className="absolute bottom-3 left-4 w-1.5 h-1.5 bg-red-500 rounded-full" />
-                <div className="absolute top-5 left-6 w-1.5 h-1.5 bg-red-500 rounded-full" />
-              </>
-            )}
+          {/* Active Canvas Radar View */}
+          <div className="relative w-28 h-28 flex items-center justify-center">
+            <canvas
+              ref={radarCanvasRef}
+              width={240}
+              height={240}
+              className="w-28 h-28 rounded-full border border-cyan-500/30 shadow-inner"
+            />
           </div>
 
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-            <span>{t.speed}:</span>
-            <span className="text-white font-bold">{speedKmh} km/h</span>
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-            <span>{t.altitude}:</span>
-            <span className="text-white font-bold">{altitudeM} m</span>
+          {/* Proximity & Distance Telemetry */}
+          <div className="flex flex-col w-full gap-0.5 pt-1 border-t border-white/10">
+            <div className="flex items-center justify-between text-[10px] font-mono">
+              <span className="text-slate-400">Цель:</span>
+              <span className="font-bold text-amber-400">
+                {nearestTargetM !== null ? `${nearestTargetM}m` : '0'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+              <span>{t.speed}:</span>
+              <span className="text-white font-bold">{speedKmh} km/h</span>
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+              <span>{t.altitude}:</span>
+              <span className="text-white font-bold">{altitudeM} m</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1258,14 +1705,14 @@ export const SpiderGame: React.FC = () => {
                 <kbd className="px-1 py-0.2 bg-purple-700 rounded text-[10px] font-mono font-bold text-white">
                   ПКМ (RMB)
                 </kbd>
-                <span className="text-purple-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Рывок на крышу (Point-Zip)' : 'Zip to Roof'}</span>
+                <span className="text-purple-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Паутинный удар / Зацеп' : 'Web-Strike / Point-Zip'}</span>
               </div>
 
               <div className="flex items-center gap-1 bg-amber-950/40 px-2 py-1 rounded-md border border-amber-500/30">
                 <kbd className="px-1 py-0.2 bg-amber-600 rounded text-[10px] font-mono font-bold text-white">
                   ЛКМ (LMB)
                 </kbd>
-                <span className="text-amber-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Комбо ударов' : 'Melee Combo'}</span>
+                <span className="text-amber-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Серия ударов руками / Слэм' : 'Punch Combo / Slam'}</span>
               </div>
 
               <div className="flex items-center gap-1 bg-cyan-950/40 px-2 py-1 rounded-md border border-cyan-500/30">
@@ -1275,11 +1722,32 @@ export const SpiderGame: React.FC = () => {
                 <span className="text-cyan-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Сгусток паутины' : 'Web Pellet'}</span>
               </div>
 
+              <div className="flex items-center gap-1 bg-emerald-950/40 px-2 py-1 rounded-md border border-emerald-500/30">
+                <kbd className="px-1 py-0.2 bg-emerald-700 rounded text-[10px] font-mono font-bold text-white">
+                  C / Ctrl
+                </kbd>
+                <span className="text-emerald-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Приседание / Крадущийся шаг' : 'Crouch / Stealth Perch'}</span>
+              </div>
+
               <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-md border border-white/10">
                 <kbd className="px-1 py-0.2 bg-white/10 rounded text-[10px] font-mono font-bold text-amber-300">
                   Shift
                 </kbd>
                 <span className="text-slate-300 text-[10px]">{currentLang === 'ru' ? 'Спринт / Бег по стене' : 'Sprint / Wall-Run'}</span>
+              </div>
+
+              <div className="flex items-center gap-1 bg-yellow-950/40 px-2 py-1 rounded-md border border-yellow-500/30">
+                <kbd className="px-1 py-0.2 bg-yellow-600 rounded text-[10px] font-mono font-bold text-white">
+                  Q
+                </kbd>
+                <span className="text-yellow-200 text-[10px] font-semibold">{currentLang === 'ru' ? 'Уклонение Insomniac (Контрудар)' : 'Insomniac Dodge (Counter)'}</span>
+              </div>
+
+              <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-md border border-white/10">
+                <kbd className="px-1 py-0.2 bg-white/10 rounded text-[10px] font-mono font-bold text-slate-300">
+                  V
+                </kbd>
+                <span className="text-slate-400 text-[10px]">{currentLang === 'ru' ? 'Камера' : 'Camera'}</span>
               </div>
             </div>
 
